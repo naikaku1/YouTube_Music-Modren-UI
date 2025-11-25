@@ -9,6 +9,7 @@
   "host_permissions": [
     "https://music.youtube.com/*",
     "https://lrclib.net/*",
+    "https://lrchub.coreone.work/*",
     "https://api-free.deepl.com/*",
     "https://api.deepl.com/*"
   ],
