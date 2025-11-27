@@ -1,4 +1,4 @@
-# YouTube Music Moden UI
+# YouTube Music Modren UI
 
 **YouTube Music の Web 版の再生UIをApple Music風の歌詞プレイヤーに変える拡張機能です。**
 
