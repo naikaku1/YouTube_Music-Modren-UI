@@ -298,7 +298,7 @@
                     alert('動画IDが取得できませんでした。YouTube Music の再生画面で実行してください。');
                     return;
                 }
-                // DynamicLyrics.json 直接編集
+                // DynamicLyrics.json 直接編集（※ここはブラウザで GitHub を開くだけ。拡張からの直接 fetch は行っていません）
                 const githubUrl = `https://github.com/LRCHub/${vid}/edit/main/README.md`;
                 window.open(githubUrl, '_blank');
             }
@@ -1017,6 +1017,7 @@
                     r.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
 
+                // ★ Apple Music っぽく、アクティブ行だけ 1文字ずつハイライトを進める
                 if (dynamicLines && dynamicLines[i] && Array.isArray(dynamicLines[i].chars)) {
                     const charSpans = r.querySelectorAll('.lyric-char');
                     charSpans.forEach(sp => {

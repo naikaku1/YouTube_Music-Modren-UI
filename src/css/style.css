@@ -137,11 +137,6 @@ body.ytm-custom-layout ytmusic-search-box {
     opacity: 1;
 }
 
-/* API設定×ボタン */
-#ytm-settings-close-btn {
-    /* position等は inline-style で付与済み */
-}
-
 /* 歌詞エリア */
 #my-lyrics-container { width: 500px; height: 65vh; overflow-y: auto; scrollbar-width: none; mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent); }
 #my-lyrics-container::-webkit-scrollbar { display: none; }
@@ -191,6 +186,24 @@ body.ytm-custom-layout.ytm-has-timestamp .lyric-line.show-translation .lyric-tra
     opacity: 0.95;
     max-height: 4em;
     margin-top: 6px;
+}
+
+/* ★ Apple Music 風：1文字ずつ光る演出 */
+body.ytm-custom-layout .lyric-line .lyric-char {
+    display: inline-block;
+    transition:
+        color 0.12s linear,
+        transform 0.12s linear,
+        text-shadow 0.12s linear,
+        opacity 0.12s linear;
+}
+body.ytm-custom-layout .lyric-line .lyric-char.char-pending {
+    opacity: 0.35;
+}
+body.ytm-custom-layout .lyric-line.active .lyric-char.char-active {
+    opacity: 1;
+    transform: translateY(-1px);
+    text-shadow: 0 0 12px rgba(255,255,255,0.8);
 }
 
 /* プレーヤーバーのスタイル */
