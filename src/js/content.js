@@ -16,6 +16,8 @@
     let lyricsData = [];
     let hasTimestamp = false;
     let dynamicLines = null;
+    let lyricsCandidates = null;
+    let selectedCandidateId = null;
     let lastActiveIndex = -1;
     let lastTimeForChars = -1;
     let lyricRafId = null;
@@ -25,7 +27,8 @@
         title: null, artist: null, artwork: null,
         lyrics: null, input: null, settings: null,
         btnArea: null, uploadMenu: null, deleteDialog: null,
-        settingsBtn: null
+        settingsBtn: null,
+        lyricsBtn: null
     };
 
     let hideTimer = null;
@@ -233,8 +236,297 @@
     function setupAutoHideEvents() {
         if (document.body.dataset.autohideSetup) return;
         ['mousemove', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, handleInteraction));
-        document.body.dataset.autohideSetup = "true";
+        document.body.dataset.autohideSetup = 'true';
         handleInteraction();
+    }
+
+    async function applyTranslations(baseLines, youtubeUrl) {
+        if (!config.useTrans || !Array.isArray(baseLines) || !baseLines.length) return baseLines;
+
+        const mainLangStored = await storage.get('ytm_main_lang');
+        const subLangStored = await storage.get('ytm_sub_lang');
+        if (mainLangStored) config.mainLang = mainLangStored;
+        if (subLangStored !== null && subLangStored !== undefined) config.subLang = subLangStored;
+
+        const mainLang = config.mainLang || 'original';
+        const subLang = config.subLang || '';
+
+        const langsToFetch = [];
+        if (mainLang && mainLang !== 'original') langsToFetch.push(mainLang);
+        if (subLang && subLang !== 'original' && subLang !== mainLang && subLang) langsToFetch.push(subLang);
+        if (!langsToFetch.length) return baseLines;
+
+        let lrcMap = {};
+        try {
+            const res = await new Promise(resolve => {
+                chrome.runtime.sendMessage({
+                    type: 'GET_TRANSLATION',
+                    payload: { youtube_url: youtubeUrl, langs: langsToFetch }
+                }, resolve);
+            });
+            if (res?.success && res.lrcMap) lrcMap = res.lrcMap;
+        } catch (e) {
+            console.warn('GET_TRANSLATION failed', e);
+        }
+
+        const transLinesByLang = {};
+        const needDeepL = [];
+
+        langsToFetch.forEach(lang => {
+            const lrc = (lrcMap && lrcMap[lang]) || '';
+            if (lrc) {
+                const parsed = parseLRCNoFlag(lrc);
+                transLinesByLang[lang] = parsed;
+            } else {
+                needDeepL.push(lang);
+            }
+        });
+
+        if (needDeepL.length && config.deepLKey) {
+            for (const lang of needDeepL) {
+                const translatedTexts = await translateTo(baseLines, lang);
+                if (translatedTexts && translatedTexts.length === baseLines.length) {
+                    const lines = baseLines.map((l, i) => ({
+                        time: l.time,
+                        text: translatedTexts[i]
+                    }));
+                    transLinesByLang[lang] = lines;
+
+                    const plain = translatedTexts.join('\n');
+                    if (plain.trim()) {
+                        chrome.runtime.sendMessage({
+                            type: 'REGISTER_TRANSLATION',
+                            payload: { youtube_url: youtubeUrl, lang, lyrics: plain }
+                        }, (res) => {
+                            console.log('[CS] REGISTER_TRANSLATION', lang, res);
+                        });
+                    }
+                }
+            }
+        }
+
+        const alignedMap = buildAlignedTranslations(baseLines, transLinesByLang);
+        const final = baseLines.map(l => ({ ...l }));
+
+        const getLangTextAt = (langCode, index, baseText) => {
+            if (!langCode || langCode === 'original') return baseText;
+            const arr = alignedMap[langCode];
+            if (!arr) return baseText;
+
+            const v = arr[index];
+            return (v === null || v === undefined) ? baseText : v;
+        };
+
+        for (let i = 0; i < final.length; i++) {
+            const baseText = final[i].text;
+            let primary = getLangTextAt(mainLang, i, baseText);
+            let secondary = null;
+
+            if (subLang && subLang !== mainLang) {
+                secondary = getLangTextAt(subLang, i, baseText);
+            } else if (!subLang && mainLang !== 'original') {
+                if (normalizeStr(primary) !== normalizeStr(baseText)) {
+                    secondary = baseText;
+                }
+            }
+
+            if (secondary && normalizeStr(primary) === normalizeStr(secondary)) {
+                if (!isMixedLang(baseText)) secondary = null;
+            }
+
+            final[i].text = primary;
+            if (secondary) final[i].translation = secondary;
+            else delete final[i].translation;
+        }
+
+        dedupePrimarySecondary(final);
+        return final;
+    }
+
+    const buildAlignedTranslations = (baseLines, transLinesByLang) => {
+        const alignedMap = {};
+        const TOL = 0.15;
+
+        Object.keys(transLinesByLang).forEach(lang => {
+            const arr = transLinesByLang[lang];
+            const res = new Array(baseLines.length).fill(null);
+
+            if (!Array.isArray(arr) || !arr.length) {
+                alignedMap[lang] = res;
+                return;
+            }
+
+            let j = 0;
+            for (let i = 0; i < baseLines.length; i++) {
+                const baseLine = baseLines[i] || {};
+                const tBase = baseLine.time;
+                const baseTextRaw = (baseLine.text ?? '');
+
+                if (baseTextRaw.trim() === '') {
+                    res[i] = '';
+                    continue;
+                }
+
+                if (typeof tBase !== 'number') {
+                    const cand = arr[i];
+                    if (cand && typeof cand.text === 'string') {
+                        const raw = cand.text;
+                        const trimmed = raw.trim();
+                        res[i] = trimmed === '' ? '' : trimmed;
+                    }
+                    continue;
+                }
+
+                while (
+                    j < arr.length &&
+                    typeof arr[j].time === 'number' &&
+                    arr[j].time < tBase - TOL
+                ) {
+                    j++;
+                }
+
+                if (
+                    j < arr.length &&
+                    typeof arr[j].time === 'number' &&
+                    Math.abs(arr[j].time - tBase) <= TOL
+                ) {
+                    const raw = (arr[j].text ?? '');
+                    const trimmed = raw.trim();
+                    res[i] = trimmed === '' ? '' : trimmed;
+                } else {
+                    res[i] = null;
+                }
+            }
+
+            alignedMap[lang] = res;
+        });
+
+        return alignedMap;
+    };
+
+    async function applyLyricsText(rawLyrics) {
+        const keyAtStart = currentKey;
+
+        if (!rawLyrics || typeof rawLyrics !== 'string' || !rawLyrics.trim()) {
+            if (keyAtStart !== currentKey) return;
+            lyricsData = [];
+            hasTimestamp = false;
+            renderLyrics([]);
+            return;
+        }
+
+        let parsed = parseBaseLRC(rawLyrics);
+        const videoUrl = getCurrentVideoUrl();
+        let finalLines = parsed;
+
+        if (config.useTrans) {
+            finalLines = await applyTranslations(parsed, videoUrl);
+        }
+
+        if (keyAtStart !== currentKey) return;
+
+        lyricsData = finalLines;
+        renderLyrics(finalLines);
+    }
+
+    async function selectCandidateById(candId) {
+        if (!Array.isArray(lyricsCandidates) || !lyricsCandidates.length) return;
+        const cand = lyricsCandidates.find((c, idx) => (c.id || String(idx)) === candId);
+        if (!cand || typeof cand.lyrics !== 'string' || !cand.lyrics.trim()) return;
+
+        selectedCandidateId = candId;
+        dynamicLines = null;
+
+        if (currentKey) {
+            storage.set(currentKey, {
+                lyrics: cand.lyrics,
+                dynamicLines: null,
+                noLyrics: false,
+                candidateId: cand.id || null
+            });
+        }
+
+        await applyLyricsText(cand.lyrics);
+
+        const youtube_url = getCurrentVideoUrl();
+        const video_id = getCurrentVideoId();
+        const candidate_id = cand.id || candId;
+
+        try {
+            chrome.runtime.sendMessage(
+                {
+                    type: 'SELECT_LYRICS_CANDIDATE',
+                    payload: { youtube_url, video_id, candidate_id }
+                },
+                (res) => {
+                    console.log('[CS] SELECT_LYRICS_CANDIDATE result:', res);
+                }
+            );
+        } catch (e) {
+            console.warn('[CS] SELECT_LYRICS_CANDIDATE failed to send', e);
+        }
+
+        const reloadKey = currentKey;
+        setTimeout(() => {
+            const metaNow = getMetadata();
+            if (!metaNow) return;
+
+            const keyNow = `${metaNow.title}///${metaNow.artist}`;
+            if (keyNow !== reloadKey) return;
+
+            storage.remove(reloadKey);
+            loadLyrics(metaNow);
+        }, 10000);
+    }
+
+    function refreshCandidateMenu() {
+        if (!ui.uploadMenu) {
+            if (ui.lyricsBtn) ui.lyricsBtn.classList.remove('ytm-lyrics-has-candidates');
+            return;
+        }
+        const section = ui.uploadMenu.querySelector('.ytm-upload-menu-candidates');
+        const list = section ? section.querySelector('.ytm-upload-menu-candidate-list') : null;
+        if (!section || !list) return;
+
+        list.innerHTML = '';
+
+        if (!Array.isArray(lyricsCandidates) || lyricsCandidates.length <= 1) {
+            section.style.display = 'none';
+            if (ui.lyricsBtn) ui.lyricsBtn.classList.remove('ytm-lyrics-has-candidates');
+            return;
+        }
+
+        section.style.display = 'block';
+
+        lyricsCandidates.forEach((cand, idx) => {
+            const id = cand.id || String(idx);
+            const btn = document.createElement('button');
+            btn.className = 'ytm-upload-menu-item ytm-upload-menu-item-candidate';
+            btn.dataset.action = 'candidate';
+            btn.dataset.candidateId = id;
+
+            let labelText = '';
+            if (cand.artist && cand.title) {
+                labelText = `${cand.artist} - ${cand.title}`;
+            } else if (cand.artist || cand.title) {
+                labelText = `${cand.artist || ''}${cand.artist && cand.title ? ' - ' : ''}${cand.title || ''}`;
+            } else if (cand.path) {
+                labelText = cand.path;
+            } else {
+                labelText = `候補${idx + 1}`;
+            }
+            if (cand.source) labelText += ` [${cand.source}]`;
+            if (cand.has_synced) labelText += ' ⏱';
+
+            btn.textContent = labelText;
+            list.appendChild(btn);
+        });
+
+        if (ui.lyricsBtn) {
+            ui.lyricsBtn.classList.remove('ytm-lyrics-has-candidates');
+            void ui.lyricsBtn.offsetWidth;
+            ui.lyricsBtn.classList.add('ytm-lyrics-has-candidates');
+        }
     }
 
     function setupUploadMenu(uploadBtn) {
@@ -243,20 +535,24 @@
 
         const menu = createEl('div', 'ytm-upload-menu', 'ytm-upload-menu');
         menu.innerHTML = `
-            <div class="ytm-upload-menu-title">歌詞アップロード</div>
+            <div class="ytm-upload-menu-title">Lyrics</div>
             <button class="ytm-upload-menu-item" data-action="local">
                 <span class="ytm-upload-menu-item-icon">💾</span>
-                <span>ローカル歌詞読み込み/ReadLyrics</span>
+                <span>ローカル歌詞読み込み / ReadLyrics</span>
             </button>
             <button class="ytm-upload-menu-item" data-action="add-sync">
                 <span class="ytm-upload-menu-item-icon">✨</span>
-                <span>歌詞同期を追加/AddTiming</span>
+                <span>歌詞同期を追加 / AddTiming</span>
             </button>
             <div class="ytm-upload-menu-separator"></div>
             <button class="ytm-upload-menu-item" data-action="fix">
                 <span class="ytm-upload-menu-item-icon">✏️</span>
-                <span>歌詞の間違いを修正/FixLyrics</span>
+                <span>歌詞の間違いを修正 / FixLyrics</span>
             </button>
+            <div class="ytm-upload-menu-candidates" style="display:none;">
+                <div class="ytm-upload-menu-subtitle">別の歌詞を選択</div>
+                <div class="ytm-upload-menu-candidate-list"></div>
+            </div>
         `;
         ui.btnArea.appendChild(menu);
         ui.uploadMenu = menu;
@@ -278,6 +574,7 @@
             const target = ev.target.closest('.ytm-upload-menu-item');
             if (!target) return;
             const action = target.dataset.action;
+            const candId = target.dataset.candidateId || null;
             toggleMenu(false);
 
             if (action === 'local') {
@@ -297,6 +594,8 @@
                 }
                 const githubUrl = `https://github.com/LRCHub/${vid}/edit/main/README.md`;
                 window.open(githubUrl, '_blank');
+            } else if (action === 'candidate' && candId) {
+                selectCandidateById(candId);
             }
         });
 
@@ -309,6 +608,8 @@
                 ui.uploadMenu.classList.remove('visible');
             }, true);
         }
+
+        refreshCandidateMenu();
     }
 
     function setupDeleteDialog(trashBtn) {
@@ -359,7 +660,10 @@
                     storage.remove(currentKey);
                     lyricsData = [];
                     dynamicLines = null;
+                    lyricsCandidates = null;
+                    selectedCandidateId = null;
                     renderLyrics([]);
+                    refreshCandidateMenu();
                 }
                 toggleDialog(false);
             });
@@ -525,7 +829,7 @@
         ui.btnArea = createEl('div', 'ytm-btn-area');
         const btns = [];
 
-        const uploadBtnConfig = { txt: 'Upload', click: () => { } };
+        const lyricsBtnConfig = { txt: 'Lyrics', cls: 'lyrics-btn', click: () => { } };
         const trashBtnConfig = { txt: '🗑️', cls: 'icon-btn', click: () => { } };
         const settingsBtnConfig = {
             txt: '⚙️',
@@ -533,14 +837,17 @@
             click: () => { initSettings(); ui.settings.classList.toggle('active'); }
         };
 
-        btns.push(uploadBtnConfig, trashBtnConfig, settingsBtnConfig);
+        btns.push(lyricsBtnConfig, trashBtnConfig, settingsBtnConfig);
 
         btns.forEach(b => {
             const btn = createEl('button', '', `ytm-glass-btn ${b.cls || ''}`, b.txt);
             btn.onclick = b.click;
             ui.btnArea.appendChild(btn);
 
-            if (b === uploadBtnConfig) setupUploadMenu(btn);
+            if (b === lyricsBtnConfig) {
+                ui.lyricsBtn = btn;
+                setupUploadMenu(btn);
+            }
             if (b === trashBtnConfig) setupDeleteDialog(btn);
             if (b === settingsBtnConfig) ui.settingsBtn = btn;
         });
@@ -562,170 +869,6 @@
         setupAutoHideEvents();
     }
 
-    const buildAlignedTranslations = (baseLines, transLinesByLang) => {
-        const alignedMap = {};
-        const TOL = 0.15;
-
-        Object.keys(transLinesByLang).forEach(lang => {
-            const arr = transLinesByLang[lang];
-            const res = new Array(baseLines.length).fill(null);
-
-            if (!Array.isArray(arr) || !arr.length) {
-                alignedMap[lang] = res;
-                return;
-            }
-
-            let j = 0;
-            for (let i = 0; i < baseLines.length; i++) {
-                const baseLine = baseLines[i] || {};
-                const tBase = baseLine.time;
-                const baseTextRaw = (baseLine.text ?? '');
-
-                if (baseTextRaw.trim() === '') {
-                    res[i] = '';
-                    continue;
-                }
-
-                if (typeof tBase !== 'number') {
-                    const cand = arr[i];
-                    if (cand && typeof cand.text === 'string') {
-                        const raw = cand.text;
-                        const trimmed = raw.trim();
-                        res[i] = trimmed === '' ? '' : trimmed;
-                    }
-                    continue;
-                }
-
-                while (
-                    j < arr.length &&
-                    typeof arr[j].time === 'number' &&
-                    arr[j].time < tBase - TOL
-                ) {
-                    j++;
-                }
-
-                if (
-                    j < arr.length &&
-                    typeof arr[j].time === 'number' &&
-                    Math.abs(arr[j].time - tBase) <= TOL
-                ) {
-                    const raw = (arr[j].text ?? '');
-                    const trimmed = raw.trim();
-                    res[i] = trimmed === '' ? '' : trimmed;
-                } else {
-                    res[i] = null;
-                }
-            }
-
-            alignedMap[lang] = res;
-        });
-
-        return alignedMap;
-    };
-
-    async function applyTranslations(baseLines, youtubeUrl) {
-        if (!config.useTrans || !Array.isArray(baseLines) || !baseLines.length) return baseLines;
-
-        const mainLangStored = await storage.get('ytm_main_lang');
-        const subLangStored = await storage.get('ytm_sub_lang');
-        if (mainLangStored) config.mainLang = mainLangStored;
-        if (subLangStored !== null && subLangStored !== undefined) config.subLang = subLangStored;
-
-        const mainLang = config.mainLang || 'original';
-        const subLang = config.subLang || '';
-
-        const langsToFetch = [];
-        if (mainLang && mainLang !== 'original') langsToFetch.push(mainLang);
-        if (subLang && subLang !== 'original' && subLang !== mainLang && subLang) langsToFetch.push(subLang);
-        if (!langsToFetch.length) return baseLines;
-
-        let lrcMap = {};
-        try {
-            const res = await new Promise(resolve => {
-                chrome.runtime.sendMessage({
-                    type: 'GET_TRANSLATION',
-                    payload: { youtube_url: youtubeUrl, langs: langsToFetch }
-                }, resolve);
-            });
-            if (res?.success && res.lrcMap) lrcMap = res.lrcMap;
-        } catch (e) {
-            console.warn('GET_TRANSLATION failed', e);
-        }
-
-        const transLinesByLang = {};
-        const needDeepL = [];
-
-        langsToFetch.forEach(lang => {
-            const lrc = (lrcMap && lrcMap[lang]) || '';
-            if (lrc) {
-                const parsed = parseLRCNoFlag(lrc);
-                transLinesByLang[lang] = parsed;
-            } else {
-                needDeepL.push(lang);
-            }
-        });
-
-        if (needDeepL.length && config.deepLKey) {
-            for (const lang of needDeepL) {
-                const translatedTexts = await translateTo(baseLines, lang);
-                if (translatedTexts && translatedTexts.length === baseLines.length) {
-                    const lines = baseLines.map((l, i) => ({
-                        time: l.time,
-                        text: translatedTexts[i]
-                    }));
-                    transLinesByLang[lang] = lines;
-
-                    const plain = translatedTexts.join('\n');
-                    if (plain.trim()) {
-                        chrome.runtime.sendMessage({
-                            type: 'REGISTER_TRANSLATION',
-                            payload: { youtube_url: youtubeUrl, lang, lyrics: plain }
-                        }, (res) => {
-                            console.log('[CS] REGISTER_TRANSLATION', lang, res);
-                        });
-                    }
-                }
-            }
-        }
-
-        const alignedMap = buildAlignedTranslations(baseLines, transLinesByLang);
-        const final = baseLines.map(l => ({ ...l }));
-
-        const getLangTextAt = (langCode, index, baseText) => {
-            if (!langCode || langCode === 'original') return baseText;
-            const arr = alignedMap[langCode];
-            if (!arr) return baseText;
-
-            const v = arr[index];
-            return (v === null || v === undefined) ? baseText : v;
-        };
-
-        for (let i = 0; i < final.length; i++) {
-            const baseText = final[i].text;
-            let primary = getLangTextAt(mainLang, i, baseText);
-            let secondary = null;
-
-            if (subLang && subLang !== mainLang) {
-                secondary = getLangTextAt(subLang, i, baseText);
-            } else if (!subLang && mainLang !== 'original') {
-                if (normalizeStr(primary) !== normalizeStr(baseText)) {
-                    secondary = baseText;
-                }
-            }
-
-            if (secondary && normalizeStr(primary) === normalizeStr(secondary)) {
-                if (!isMixedLang(baseText)) secondary = null;
-            }
-
-            final[i].text = primary;
-            if (secondary) final[i].translation = secondary;
-            else delete final[i].translation;
-        }
-
-        dedupePrimarySecondary(final);
-        return final;
-    }
-
     async function loadLyrics(meta) {
         if (!config.deepLKey) config.deepLKey = await storage.get('ytm_deepl_key');
         const cachedTrans = await storage.get('ytm_trans_enabled');
@@ -740,6 +883,8 @@
 
         let cached = await storage.get(thisKey);
         dynamicLines = null;
+        lyricsCandidates = null;
+        selectedCandidateId = null;
         let data = null;
         let noLyricsCached = false;
 
@@ -764,6 +909,7 @@
         if (!data && noLyricsCached) {
             if (thisKey !== currentKey) return;
             renderLyrics([]);
+            refreshCandidateMenu();
             return;
         }
 
@@ -771,7 +917,7 @@
             let gotLyrics = false;
 
             try {
-                const track = meta.title.replace(/\s*[\(-\[].*?[\)-]].*/, "");
+                const track = meta.title.replace(/\s*[\(-\[].*?[\)-]].*/, '');
                 const artist = meta.artist;
                 const youtube_url = getCurrentVideoUrl();
                 const video_id = getCurrentVideoId();
@@ -785,12 +931,30 @@
 
                 console.log('[CS] GET_LYRICS response:', res);
 
+                if (Array.isArray(res?.candidates) && res.candidates.length) {
+                    lyricsCandidates = res.candidates;
+                } else {
+                    lyricsCandidates = null;
+                }
+                refreshCandidateMenu();
+
                 if (res?.success && typeof res.lyrics === 'string' && res.lyrics.trim()) {
                     data = res.lyrics;
                     gotLyrics = true;
 
                     if (Array.isArray(res.dynamicLines) && res.dynamicLines.length) {
                         dynamicLines = res.dynamicLines;
+                    }
+
+                    if (Array.isArray(lyricsCandidates) && lyricsCandidates.length) {
+                        const trimmedBase = data.trim();
+                        const matched = lyricsCandidates.find((c, idx) =>
+                            typeof c.lyrics === 'string' && c.lyrics.trim() === trimmedBase
+                        );
+                        if (matched) {
+                            const idx = lyricsCandidates.indexOf(matched);
+                            selectedCandidateId = matched.id || String(idx);
+                        }
                     }
 
                     if (thisKey === currentKey) {
@@ -821,21 +985,11 @@
 
         if (!data) {
             renderLyrics([]);
+            refreshCandidateMenu();
             return;
         }
 
-        let parsed = parseBaseLRC(data);
-        const videoUrl = getCurrentVideoUrl();
-        let finalLines = parsed;
-
-        if (config.useTrans) {
-            finalLines = await applyTranslations(parsed, videoUrl);
-        }
-
-        if (thisKey !== currentKey) return;
-
-        lyricsData = finalLines;
-        renderLyrics(finalLines);
+        await applyLyricsText(data);
     }
 
     function renderLyrics(data) {
@@ -1054,7 +1208,11 @@
         if (currentKey !== key) {
             currentKey = key;
             lyricsData = [];
+            dynamicLines = null;
+            lyricsCandidates = null;
+            selectedCandidateId = null;
             updateMetaUI(meta);
+            refreshCandidateMenu();
             if (ui.lyrics) ui.lyrics.scrollTop = 0;
             loadLyrics(meta);
         }
@@ -1067,10 +1225,10 @@
             ui.artwork.innerHTML = `<img src="${meta.src}" crossorigin="anonymous">`;
             ui.bg.style.backgroundImage = `url(${meta.src})`;
         }
-        ui.lyrics.innerHTML = '<div style="opacity:0.5; padding:20px;">Loading...</div>';
+        ui.lyrics.innerHTML = '<div class="lyric-loading" style="opacity:0.5; padding:20px;">Loading...</div>';
     }
 
-    console.log("YTM Immersion loaded.");
+    console.log('YTM Immersion loaded.');
     setInterval(tick, 1000);
     startLyricRafLoop();
 })();
