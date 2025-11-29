@@ -848,35 +848,6 @@
         document.body.classList.toggle('ytm-has-timestamp', hasTimestamp);
         document.body.classList.toggle('ytm-no-timestamp', !hasTimestamp);
 
-        if (!hasData) {
-            const meta = getMetadata();
-            const title = meta?.title || '';
-            const artist = meta?.artist || '';
-            const infoText = title && artist
-                ? `「${title} / ${artist}」の歌詞はまだ見つかりませんでした。`
-                : 'この曲の歌詞はまだ見つかりませんでした。';
-
-            const videoUrl = getCurrentVideoUrl();
-            const base = 'https://lrchub.coreone.work';
-            const lrchubManualUrl = videoUrl
-                ? `${base}/manual?video_url=${encodeURIComponent(videoUrl)}`
-                : base;
-
-            ui.lyrics.innerHTML = `
-                <div class="no-lyrics-message" style="padding:20px; opacity:0.8;">
-                    <p>${infoText}</p>
-                    <p style="margin-top:8px;">
-                        <a href="${lrchubManualUrl}"
-                           target="_blank"
-                           rel="noopener noreferrer">
-                           LRCHubで歌詞を追加する
-                        </a>
-                    </p>
-                </div>
-            `;
-            return;
-        }
-
         data.forEach((line, index) => {
             const row = createEl('div', '', 'lyric-line');
             const mainSpan = createEl('span', '', 'lyric-main');

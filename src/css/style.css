@@ -551,7 +551,7 @@ body.ytm-custom-layout.ytm-no-timestamp .lyric-line {
 }
 
 /* ★ メッセージ（Loading / No lyrics）をくっきり表示 */
-.no-lyrics-message, .lyric-loading {
+.lyric-loading {
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -563,11 +563,6 @@ body.ytm-custom-layout.ytm-no-timestamp .lyric-line {
     font-size: 18px;
     opacity: 1 !important; /* 強制的に不透明 */
     text-shadow: 0 4px 15px rgba(0,0,0,0.6);
-}
-.no-lyrics-message a {
-    color: #3ea6ff;
-    text-decoration: none;
-    border-bottom: 1px solid rgba(62, 166, 255, 0.3);
 }
 
 /* issue #13 Fix */
