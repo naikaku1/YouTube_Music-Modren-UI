@@ -102,8 +102,11 @@ body.ytm-custom-layout ytmusic-search-box {
 
 #ytm-custom-artist { font-size: 20px; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 24px; }
 
-#ytm-btn-area { 
-    display: flex; gap: 10px; margin-top: 10px;
+#ytm-btn-area {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
     transition: opacity 0.5s ease, visibility 0.5s ease;
     opacity: 1;
     visibility: visible;
