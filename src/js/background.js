@@ -127,7 +127,12 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   // ★ ここで config / requests も拾う
   const fetchCandidatesFromUrl = (url) => {
     if (!url) {
-      return Promise.resolve({ candidates: [], hasSelectCandidates: false, config: null, requests: [] });
+      return Promise.resolve({
+        candidates: [],
+        hasSelectCandidates: false,
+        config: null,
+        requests: []
+      });
     }
 
     try {
@@ -145,16 +150,35 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     console.log('[BG] fetchCandidatesFromUrl:', url);
 
     return fetch(url)
-      .then(r => (r.ok ? r.json() : Promise.reject(r.statusText)))
-      .then(json => {
+      .then(async (r) => {
+        // ★ ステータスに関わらず JSON を読みに行く
+        let json;
+        try {
+          json = await r.json();
+        } catch (e) {
+          throw new Error(r.statusText || 'Invalid JSON');
+        }
+
         const res = json.response || json;
+
         const list = Array.isArray(res.candidates) ? res.candidates : [];
-        console.log('[BG] candidates count:', list.length);
         const config = res.config || null;
         const requests = Array.isArray(res.requests) ? res.requests : [];
+
+        console.log(
+          '[BG] candidates result:',
+          'status=', r.status,
+          'code=', res.code,
+          'candidates=', list.length,
+          'requests=', requests.length
+        );
+
+        // SELECT_NOT_FOUND のときは candidates も requests も空、config だけ生きている想定
+        const hasSelectCandidates = list.length > 1;
+
         return {
           candidates: list,
-          hasSelectCandidates: list.length > 1,
+          hasSelectCandidates,
           config,
           requests
         };
@@ -190,6 +214,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     return u.toString();
   };
 
+  // ★ 修正版 fetchFromLrchub
   const fetchFromLrchub = (track, artist, youtube_url, video_id) => {
     return fetch('https://lrchub.coreone.work/api/lyrics', {
       method: 'POST',
@@ -261,22 +286,43 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
             else if (plain) lyrics = plain;
           }
 
-          if (hasSelectCandidates) {
-            const url = buildCandidatesUrl(res, video_id);
-            if (url) {
-              return fetchCandidatesFromUrl(url).then(cRes => {
-                candidates = cRes.candidates;
-                hasSelectCandidates = cRes.hasSelectCandidates;
-                if (cRes.config) config = cRes.config;
-                if (Array.isArray(cRes.requests)) requests = cRes.requests;
-                return { lyrics, dynamicLines, hasSelectCandidates, candidates, config, requests };
-              });
-            }
+          const url = buildCandidatesUrl(res, video_id);
+          if (url) {
+            return fetchCandidatesFromUrl(url).then(cRes => {
+              // candidate 一覧
+              candidates = cRes.candidates;
+
+              // どちらかが true なら candidates UI を出す
+              hasSelectCandidates = !!(
+                hasSelectCandidates || cRes.hasSelectCandidates
+              );
+
+              // config は candidates API 側があれば優先
+              if (cRes.config) {
+                config = cRes.config;
+              }
+
+              // ★重要★ requests は candidates API から「非空で来たときだけ」上書き
+              // SELECT_NOT_FOUND などで [] のときは lyrics API 側の requests をそのまま使う
+              if (Array.isArray(cRes.requests) && cRes.requests.length) {
+                requests = cRes.requests;
+              }
+
+              return {
+                lyrics,
+                dynamicLines,
+                hasSelectCandidates,
+                candidates,
+                config,
+                requests
+              };
+            });
           }
         } catch (e) {
           console.warn('[BG] Lyrics API response parse failed', e);
         }
 
+        // candidates API を叩かなかった / 失敗した場合はこちら
         return { lyrics, dynamicLines, hasSelectCandidates, candidates, config, requests };
       });
   };
@@ -324,7 +370,7 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     console.log('[BG] GET_LYRICS', { track, artist, youtube_url, video_id });
 
     (async () => {
-      const timeoutMs = 60000; //フォールバックに移動するタイムアウトのやつ（早すぎると登録前にフォールバックして取得出来なくなる）
+      const timeoutMs = 90000; //フォールバックに移動するタイムアウトのやつ
       let githubFallback = false;
 
       try {

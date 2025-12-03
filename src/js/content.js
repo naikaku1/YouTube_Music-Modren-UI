@@ -212,6 +212,7 @@
     }
   };
 
+  // ★ 修正版: DeepL フォールバック専用（GET_LYRICS は叩かない）
   const translateMixedSegments = async (lines, indexes, langCode, targetLang) => {
     try {
       const segmentsToTranslate = [];
@@ -248,7 +249,9 @@
         );
       });
 
-      if (!res?.success || !Array.isArray(res.translations) || res.translations.length !== segmentsToTranslate.length) {
+      if (!res?.success ||
+        !Array.isArray(res.translations) ||
+        res.translations.length !== segmentsToTranslate.length) {
         return null;
       }
 
@@ -259,6 +262,7 @@
         const lineIdx = Number(key);
         const segMeta = perLineSegments[lineIdx];
         let rebuilt = '';
+
         segMeta.forEach(seg => {
           if (seg.translateIndex == null) {
             rebuilt += seg.original;
@@ -266,6 +270,7 @@
             rebuilt += segTranslations[seg.translateIndex] ?? seg.original;
           }
         });
+
         result[lineIdx] = rebuilt;
       });
 
@@ -509,39 +514,38 @@
     return final;
   }
 
-
   //翻訳処理（※タイムスタンプの空白を詰めない仕様などあるため、触るときは慎重に）
   const buildAlignedTranslations = (baseLines, transLinesByLang) => {
     const alignedMap = {};
     const TOL = 0.15; // 時間マッチの許容誤差
-  
+
     Object.keys(transLinesByLang).forEach(lang => {
       const arr = transLinesByLang[lang];
       const res = new Array(baseLines.length).fill(null);
-  
+
       if (!Array.isArray(arr) || !arr.length) {
         alignedMap[lang] = res;
         return;
       }
-  
+
       let j = 0; // 翻訳側のインデックス
-  
+
       for (let i = 0; i < baseLines.length; i++) {
         const baseLine = baseLines[i] || {};
         const tBase = baseLine.time;
         const baseTextRaw = (baseLine.text ?? '');
-  
+
         // ★ 元の歌詞側が「空行」の場所には絶対に翻訳を入れない
         const isEmptyBaseLine =
           typeof baseTextRaw === 'string' && baseTextRaw.trim() === '';
-  
+
         if (isEmptyBaseLine) {
           // 空行は空行のままにしておきたいので、翻訳文字列を詰めない
           // （getLangTextAt 側で baseText が '' なので、結果的に空行になる）
           res[i] = '';
           continue;
         }
-  
+
         // ★ タイムスタンプ無し歌詞（プレーンな行）は従来通り「行番号で」対応
         if (typeof tBase !== 'number') {
           const cand = arr[i];
@@ -575,13 +579,11 @@
         }
       }
 
-    alignedMap[lang] = res;
-  });
+      alignedMap[lang] = res;
+    });
 
-  return alignedMap;
-};
-
-
+    return alignedMap;
+  };
 
   async function applyLyricsText(rawLyrics) {
     const keyAtStart = currentKey;
@@ -708,7 +710,7 @@
     }
   }
 
-  // ★ 追加: ロックボタン & AddTiming グレーアウト制御
+  // ★ lockボタン & AddTiming グレーアウト制御（修正版）
   function refreshLockMenu() {
     if (!ui.uploadMenu) return;
 
@@ -716,28 +718,77 @@
     const lockList = lockSection
       ? lockSection.querySelector('.ytm-upload-menu-lock-list')
       : null;
-    const addSyncBtn = ui.uploadMenu.querySelector('.ytm-upload-menu-item[data-action="add-sync"]');
+    const addSyncBtn = ui.uploadMenu.querySelector(
+      '.ytm-upload-menu-item[data-action="add-sync"]'
+    );
 
     if (!lockSection || !lockList || !addSyncBtn) return;
 
     lockList.innerHTML = '';
 
-    const requests = Array.isArray(lyricsRequests) ? lyricsRequests : [];
-    const activeReqs = requests.filter(r => r && r.has_lyrics);
+    // 1) API から来た requests をベースにする
+    const mergedRequests = [];
+    if (Array.isArray(lyricsRequests)) {
+      lyricsRequests.forEach(r => {
+        if (r) mergedRequests.push({ ...r });
+      });
+    }
+
+    // 2) 足りない場合でも必ず lock_current_sync / lock_current_dynamic を追加
+    const ensureRequest = (id, label, target) => {
+      const idLower = String(id).toLowerCase();
+      if (
+        mergedRequests.some(
+          r => String(r.request || r.id || '').toLowerCase() === idLower
+        )
+      ) {
+        return; // 既にある
+      }
+      mergedRequests.push({ request: id, label, target });
+    };
+
+    // ★ここで必ず2つ生やす
+    ensureRequest('lock_current_sync', '同期歌詞を確定 (Lock sync)', 'sync');
+    ensureRequest('lock_current_dynamic', '動く歌詞を確定 (Lock dynamic)', 'dynamic');
+
+    // 3) 表示対象にするリクエストをフィルタ
+    const activeReqs = mergedRequests.filter(r => {
+      if (!r) return false;
+      if (r.has_lyrics) return true;
+      if (r.target === 'sync' || r.target === 'dynamic') return true;
+      const key = String(r.request || r.id || '').toLowerCase();
+      if (!key) return false;
+      return key.startsWith('lock_current_'); // これも対象
+    });
 
     if (!activeReqs.length) {
+      // ここはもうほぼ来ないはずだが、一応
       lockSection.style.display = 'none';
     } else {
       lockSection.style.display = 'block';
+
+      const syncLocked = !!(lyricsConfig && lyricsConfig.SyncLocked);
+      const dynamicLocked = !!(lyricsConfig && lyricsConfig.dynmicLock);
 
       activeReqs.forEach(r => {
         const btn = document.createElement('button');
         btn.className = 'ytm-upload-menu-item';
         btn.dataset.action = 'lock-request';
-        btn.dataset.requestId = r.request || r.id;
-        btn.textContent = r.label || '歌詞を確定';
+        btn.dataset.requestId = r.request || r.id || '';
 
-        if (r.locked) {
+        btn.textContent =
+          r.label || r.request || r.id || '歌詞を確定';
+
+        const key = String(r.request || r.id || '').toLowerCase();
+        const isSync = r.target === 'sync' || key.includes('sync');
+        const isDynamic = r.target === 'dynamic' || key.includes('dynamic');
+
+        const locked =
+          r.locked ||
+          (isSync && syncLocked) ||
+          (isDynamic && dynamicLocked);
+
+        if (locked) {
           btn.classList.add('ytm-upload-menu-item-disabled');
           btn.title = 'すでに確定された歌詞です';
         }
@@ -746,11 +797,15 @@
       });
     }
 
+    // 4) AddTiming ボタンのグレーアウト制御（元のロジックを維持）
     const syncLocked = !!(lyricsConfig && lyricsConfig.SyncLocked);
     const dynamicLocked = !!(lyricsConfig && lyricsConfig.dynmicLock);
     const shouldDisableAddSync = syncLocked && dynamicLocked;
 
-    addSyncBtn.classList.toggle('ytm-upload-menu-item-disabled', shouldDisableAddSync);
+    addSyncBtn.classList.toggle(
+      'ytm-upload-menu-item-disabled',
+      shouldDisableAddSync
+    );
     if (shouldDisableAddSync) {
       addSyncBtn.dataset.disabledMessage = 'すでに確定された歌詞です';
       addSyncBtn.title = 'すでに確定された歌詞です';
@@ -1120,6 +1175,7 @@
     setupAutoHideEvents();
   }
 
+  // ★ 修正版 loadLyrics: lock用情報も復元
   async function loadLyrics(meta) {
     if (!config.deepLKey) config.deepLKey = await storage.get('ytm_deepl_key');
     const cachedTrans = await storage.get('ytm_trans_enabled');
@@ -1160,14 +1216,24 @@
         if (cached.githubFallback) {
           isFallbackLyrics = true;
         }
+        if (Array.isArray(cached.candidates)) {
+          lyricsCandidates = cached.candidates;
+        }
+        if (Array.isArray(cached.requests)) {
+          lyricsRequests = cached.requests;
+        }
+        if (cached.config) {
+          lyricsConfig = cached.config;
+        }
       }
     }
+
+    refreshCandidateMenu();
+    refreshLockMenu();
 
     if (!data && noLyricsCached) {
       if (thisKey !== currentKey) return;
       renderLyrics([]);
-      refreshCandidateMenu();
-      refreshLockMenu();
       return;
     }
 
@@ -1189,12 +1255,16 @@
 
         console.log('[CS] GET_LYRICS response:', res);
 
+        // LRCHub から来た情報
         lyricsRequests = Array.isArray(res?.requests) ? res.requests : null;
         lyricsConfig = res?.config || null;
+        lyricsCandidates = Array.isArray(res?.candidates) ? res.candidates : null;
 
-        // ★ フォールバックフラグを反映
+        refreshCandidateMenu();
+        refreshLockMenu();
+
+        // フォールバックフラグ
         isFallbackLyrics = !!res?.githubFallback;
-
         if (isFallbackLyrics) {
           showToast('APIが応答しないため、GitHubの歌詞を使用しました');
         }
@@ -1207,31 +1277,22 @@
             dynamicLines = res.dynamicLines;
           }
 
-          if (Array.isArray(lyricsCandidates) && lyricsCandidates.length) {
-            const trimmedBase = data.trim();
-            const matched = lyricsCandidates.find((c, idx) =>
-              typeof c.lyrics === 'string' && c.lyrics.trim() === trimmedBase
-            );
-            if (matched) {
-              const idx = lyricsCandidates.indexOf(matched);
-              selectedCandidateId = matched.id || String(idx);
-            }
-          }
-
           if (thisKey === currentKey) {
-            // ★ 常にオブジェクトで保存し、フォールバック情報も一緒に持つ
             storage.set(thisKey, {
               lyrics: data,
               dynamicLines: dynamicLines || null,
               noLyrics: false,
-              githubFallback: isFallbackLyrics
+              githubFallback: isFallbackLyrics,
+              candidates: lyricsCandidates || null,
+              requests: lyricsRequests || null,
+              config: lyricsConfig || null
             });
           }
         } else {
           console.warn('Lyrics API returned no lyrics or success=false');
         }
       } catch (e) {
-        console.warn('Lyrics API fetch failed', e);
+        console.error('GET_LYRICS failed', e);
       }
 
       if (!gotLyrics && thisKey === currentKey) {
