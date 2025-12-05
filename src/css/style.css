@@ -577,7 +577,21 @@ body.ytm-custom-layout .middle-controls {
   overflow: visible !important;
   position: relative !important;
 }
-
+/* ホバーしたときの時間表示 */
+body.ytm-custom-layout ytmusic-player-bar #hover-time-info-new {
+  font-family: Roboto, Noto Naskh Arabic UI, Arial, sans-serif !important;
+  font-size: var(--ytmusic-caption-1-font-size) !important;
+  line-height: var(--ytmusic-title-line-height) !important;
+  font-weight: 400 !important;
+  color: #aaa !important;
+  color: #fff !important;
+  position: absolute !important;
+  top: -8px !important;
+  transform: translate3d(-50%, -100%, 0) !important;
+  padding: 4px 8px !important;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 6px !important;
+}
 /* プレイヤーバー内の曲情報は使わない */
 body.ytm-custom-layout .content-info-wrapper .style-scope {
   display: none !important;
@@ -721,6 +735,7 @@ body:not(.ytm-custom-layout) ytmusic-player-bar tp-yt-paper-slider#progress-bar 
   padding: 0 !important;
   height: 20px !important;
   z-index: 10 !important;
+
 }
 
 body:not(.ytm-custom-layout) #player-bar-background {
@@ -747,6 +762,21 @@ body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls .toggle-player-p
   order: 100 !important;
 }
 
+
+body:not(.ytm-custom-layout) ytmusic-player-bar #hover-time-info-new {
+  font-family: Roboto, Noto Naskh Arabic UI, Arial, sans-serif !important;
+  font-size: var(--ytmusic-caption-1-font-size) !important;
+  line-height: var(--ytmusic-title-line-height) !important;
+  font-weight: 400 !important;
+  color: #aaa !important;
+  color: #fff !important;
+  position: absolute !important;
+  top: -8px !important;
+  transform: translate3d(-50%, -100%, 0) !important;
+  padding: 4px 8px !important;
+  background-color: rgba(50,50,50,0.40);
+  border-radius: 6px !important;
+}
 /* Lyricsアップロードメニュー */
 .ytm-upload-menu {
   position: absolute;

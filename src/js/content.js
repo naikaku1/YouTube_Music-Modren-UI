@@ -761,7 +761,68 @@ const TEXTS = {
     hasTimestamp = hasTs;
     return lines;
   };
-
+  const hoverTimeInfoSetup = () => {
+    const timeToSeconds = (str) => {
+      const [m, s] = str.split(":").map(Number);
+      return m * 60 + s;
+    }
+    const removeHoverTimeInfo = () => {
+      const info = document.querySelector('#hover-time-info');
+      const interval = setInterval(() => {
+        if (info) {
+          info.remove();
+          clearInterval(interval);
+        }
+      }, 1000);
+    }
+    const createHoverTimeInfo = () => {
+      let info = document.querySelector('#hover-time-info-new');
+      const parent = document.querySelector('ytmusic-player-bar');
+      if (!info) {
+        info = document.createElement('span');
+        info.id = 'hover-time-info-new';
+        info.style.display = 'none';
+        info.textContent = '0:00';
+        parent.appendChild(info);
+      }
+    }
+    const adjustHoverTimeInfoPosition = () => {
+      const info = document.querySelector('#hover-time-info-new');
+      const slider = document.querySelector(
+        'tp-yt-paper-slider#progress-bar tp-yt-paper-progress#sliderBar #primaryProgress'
+      ).parentElement.parentElement;//確実に指定したい
+      const playerBar = document.querySelector('ytmusic-player-bar');
+      const refresh = () => {
+        const onMove = (e) => {
+          const marginLeft = (playerBar.parentElement.offsetWidth - playerBar.offsetWidth) / 2;
+          const infoLeft = e.clientX - marginLeft;
+          const relativeMouseX = e.clientX - marginLeft;
+          const timeinfo = document.querySelector('#left-controls > span')
+          const songLengthSeconds = timeToSeconds(timeinfo.textContent.replace(/^[^/]+\/\s*/, "")); //曲の長さを取得
+          const relativePosition = Math.round((Math.min(1,Math.max(0,(relativeMouseX / slider.offsetWidth)))) * 1000) /1000;//0~1の範囲にして小数点3位までに四捨五入する
+          const hoverTimeSeconds = Math.floor(songLengthSeconds * relativePosition);
+          const hoverTimeString = `${String(Math.floor(hoverTimeSeconds / 60))}:${String(hoverTimeSeconds % 60).padStart(2, '0')}`;
+          info.style.display = 'block';
+          info.style.left = `${infoLeft}px`;
+          info.textContent = hoverTimeString;
+        }
+        const hide = () => {
+          info.style.display = 'none';
+        };
+        slider.addEventListener('mousemove', onMove);
+        slider.addEventListener('mouseout', hide);
+      };
+      const interval = setInterval(() => {
+        if (slider && info) {
+          refresh();
+          clearInterval(interval);
+        }
+      }, 1000);
+    }
+    removeHoverTimeInfo();
+    createHoverTimeInfo();
+    adjustHoverTimeInfoPosition();
+  }
   const parseLRCNoFlag = (lrc) => {
     return parseLRCInternal(lrc).lines;
   };
@@ -2207,4 +2268,5 @@ const TEXTS = {
   console.log('YTM Immersion loaded.');
   setInterval(tick, 1000);
   startLyricRafLoop();
+  hoverTimeInfoSetup();
 })();
