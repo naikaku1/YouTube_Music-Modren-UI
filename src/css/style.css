@@ -1128,7 +1128,9 @@ body.ytm-custom-layout ytmusic-player-bar .right-controls tp-yt-paper-icon-butto
    
     padding: 8px 12px !important; 
 }
-
+body.ytm-custom-layout ytmusic-player-bar .right-controls .toggle-player-page-button{
+    padding: 0px 0px !important;
+}
 
 body.ytm-custom-layout ytmusic-player-bar .thumbnail-image-wrapper {
   display: none !important; 
