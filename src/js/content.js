@@ -65,7 +65,7 @@
   // ===================== UI 言語: リポ から取得 =====================
 
   const REMOTE_TEXTS_URL =
-    'https://raw.githubusercontent.com/neco222/YouTube_Music-Moden-UI/main/src/lang/ui.json';
+    'https://raw.githubusercontent.com/naikaku1/YTM-Modern-UI/main/src/lang/ui.json';
 
   let remoteTextsLoaded = false;
 
