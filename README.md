@@ -1,4 +1,4 @@
-# YTM Modren UI
+# YTM_Immersion
 
 **YouTube Music の Web 版の再生UIをApple Music風の歌詞プレイヤーに変える拡張機能です。**
 
