@@ -174,9 +174,11 @@
   
         item.addEventListener('click', () => {
           config.uiLang = code;
-          if (storage && storage.set) {
-            storage.set('ytm_ui_lang', code);
-          }
+          
+          // if (storage && storage.set) {
+          //   storage.set('ytm_ui_lang', code);
+          // }
+          renderSettingsPanel(); //設定パネルを即時変更
           menu.style.display = 'none';
           refreshUiLangGroup(); // 選択後にラベルやアクティブ状態を更新
         });
@@ -217,9 +219,7 @@
     setupLangPills('ui-lang-group', activeForDirect, (v) => {
       if (!v || v === '__etc__') return; // etc はここでは何もしない
       config.uiLang = v;
-      if (storage && storage.set) {
-        storage.set('ytm_ui_lang', v);
-      }
+      renderSettingsPanel(); //設定パネルを即時変更
     });
   }
 
@@ -2471,9 +2471,51 @@
     });
   }
 
-  function initSettings() {
+  async function initSettings() {
     if (ui.settings) return;
-    ui.settings = createEl('div', 'ytm-settings-panel', '', `
+    ui.settings = createEl('div', 'ytm-settings-panel', '', ``);
+    document.body.appendChild(ui.settings);
+
+    await loadRemoteTextsFromGithub();
+    if (!config.deepLKey) config.deepLKey = await storage.get('ytm_deepl_key');
+    const cachedTrans = await storage.get('ytm_trans_enabled');
+    if (cachedTrans !== null && cachedTrans !== undefined) config.useTrans = cachedTrans;
+    
+    const mainLangStored = await storage.get('ytm_main_lang');
+    if (mainLangStored) config.mainLang = mainLangStored;
+    const subLangStored = await storage.get('ytm_sub_lang');
+    if (subLangStored !== null) config.subLang = subLangStored;
+    const uiLangStored = await storage.get('ytm_ui_lang');
+    if (uiLangStored) config.uiLang = uiLangStored;
+
+    const offsetStored = await storage.get('ytm_sync_offset');
+    if (offsetStored !== null) config.syncOffset = offsetStored;
+    const saveOffsetStored = await storage.get('ytm_save_sync_offset');
+    if (saveOffsetStored !== null) config.saveSyncOffset = saveOffsetStored;
+
+    // ★スライダー初期値反映
+    const weightStored = await storage.get('ytm_lyric_weight');
+    if (weightStored) config.lyricWeight = weightStored;
+    const brightStored = await storage.get('ytm_bg_brightness');
+    if (brightStored) config.bgBrightness = brightStored;
+
+    renderSettingsPanel();
+
+    if (!settingsOutsideClickSetup) {
+      settingsOutsideClickSetup = true;
+      document.addEventListener('click', (ev) => {
+        if (!ui.settings) return;
+        if (!ui.settings.classList.contains('active')) return;
+        if (ui.settings.contains(ev.target)) return;
+        if (ui.settingsBtn && ui.settingsBtn.contains(ev.target)) return;
+        ui.settings.classList.remove('active');
+      }, true);
+    }
+  }
+
+  function renderSettingsPanel(){
+    if(!ui.settings) return;
+    ui.settings.innerHTML = `
       <button id="ytm-settings-close-btn" style="position:absolute;right:12px;top:10px;width:24px;height:24px;border-radius:999px;border:none;background:rgba(255,255,255,0.08);color:#fff;font-size:16px;line-height:1;cursor:pointer;">×</button>
       <h3>${t('settings_title')}</h3>
       
@@ -2537,78 +2579,43 @@
         <button id="save-settings-btn" style="flex:1;">${t('settings_save')}</button>
         <button id="clear-all-btn" style="background:#ff3b30; color:white;">${t('settings_reset')}</button>
       </div>
-    `);
-    document.body.appendChild(ui.settings);
-
-    (async () => {
-      await loadRemoteTextsFromGithub();
-      if (!config.deepLKey) config.deepLKey = await storage.get('ytm_deepl_key');
-      const cachedTrans = await storage.get('ytm_trans_enabled');
-      if (cachedTrans !== null && cachedTrans !== undefined) config.useTrans = cachedTrans;
-      
-      const mainLangStored = await storage.get('ytm_main_lang');
-      if (mainLangStored) config.mainLang = mainLangStored;
-      const subLangStored = await storage.get('ytm_sub_lang');
-      if (subLangStored !== null) config.subLang = subLangStored;
-      const uiLangStored = await storage.get('ytm_ui_lang');
-      if (uiLangStored) config.uiLang = uiLangStored;
-
-      const offsetStored = await storage.get('ytm_sync_offset');
-      if (offsetStored !== null) config.syncOffset = offsetStored;
-      const saveOffsetStored = await storage.get('ytm_save_sync_offset');
-      if (saveOffsetStored !== null) config.saveSyncOffset = saveOffsetStored;
-
-      // ★スライダー初期値反映
-      const weightStored = await storage.get('ytm_lyric_weight');
-      if (weightStored) config.lyricWeight = weightStored;
-      const brightStored = await storage.get('ytm_bg_brightness');
-      if (brightStored) config.bgBrightness = brightStored;
-
-      // HTML要素への反映
-      document.getElementById('deepl-key-input').value = config.deepLKey || '';
-      document.getElementById('trans-toggle').checked = config.useTrans;
-
-      document.getElementById('sync-offset-input').valueAsNumber = config.syncOffset || 0;
-      document.getElementById('sync-offset-save-toggle').checked = config.saveSyncOffset ;
-
-      const wSlider = document.getElementById('weight-slider');
-      const bSlider = document.getElementById('bright-slider');
-      
-      if(wSlider) {
-          wSlider.value = config.lyricWeight || 800;
-          document.getElementById('weight-val').textContent = wSlider.value;
-      }
-      if(bSlider) {
-          bSlider.value = config.bgBrightness || 0.35;
-          document.getElementById('bright-val').textContent = Math.round(bSlider.value * 100) + '%';
-      }
-
-      setupLangPills('main-lang-group', config.mainLang, v => { config.mainLang = v; });
-      setupLangPills('sub-lang-group', config.subLang, v => { config.subLang = v; });
-      refreshUiLangGroup();
-      
-      // ★リアルタイムプレビュー
+    `;
+    document.getElementById('deepl-key-input').value = config.deepLKey || '';
+    document.getElementById('trans-toggle').checked = config.useTrans;
+    document.getElementById('sync-offset-input').valueAsNumber = config.syncOffset || 0;
+    document.getElementById('sync-offset-save-toggle').checked = config.saveSyncOffset;
+    const wSlider = document.getElementById('weight-slider');
+    const bSlider = document.getElementById('bright-slider');
+    
+    if(wSlider) {
+      wSlider.value = config.lyricWeight || 800;
+      document.getElementById('weight-val').textContent = wSlider.value;
       wSlider.addEventListener('input', (e) => {
-          const val = e.target.value;
-          document.getElementById('weight-val').textContent = val;
-          document.documentElement.style.setProperty('--ytm-lyric-weight', val);
-      });
-      bSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        document.getElementById('weight-val').textContent = val;
+        config.lyricWeight = val; // 即時反映
+        document.documentElement.style.setProperty('--ytm-lyric-weight', val);
+    });
+    }
+    if(bSlider) {
+        bSlider.value = config.bgBrightness || 0.35;
+        document.getElementById('bright-val').textContent = Math.round(bSlider.value * 100) + '%';
+        bSlider.addEventListener('input', (e) => {
           const val = e.target.value;
           document.getElementById('bright-val').textContent = Math.round(val * 100) + '%';
           document.documentElement.style.setProperty('--ytm-bg-brightness', val);
       });
+    }
 
-    })();
-
+    setupLangPills('main-lang-group', config.mainLang, v => { config.mainLang = v; });
+    setupLangPills('sub-lang-group', config.subLang, v => { config.subLang = v; });
+    refreshUiLangGroup();
     document.getElementById('save-settings-btn').onclick = async () => {
       
-      const savedUiLang = await storage.get('ytm_ui_lang');
       const savedMainLang = await storage.get('ytm_main_lang');
       const savedSubLang = await storage.get('ytm_sub_lang');
       const savedUseTrans = await storage.get('ytm_trans_enabled');
 
-      const prevUiLang = savedUiLang || 'ja';
       const prevMainLang = savedMainLang || 'original';
       const prevSubLang = savedSubLang !== null ? savedSubLang : 'en'; 
       const prevUseTrans = savedUseTrans !== null ? savedUseTrans : true;
@@ -2637,7 +2644,6 @@
       storage.set('ytm_save_sync_offset', config.saveSyncOffset);
 
       const needReload = (
-          prevUiLang !== config.uiLang ||
           prevMainLang !== config.mainLang ||
           prevSubLang !== config.subLang ||
           prevUseTrans !== config.useTrans
@@ -2660,17 +2666,8 @@
         ui.settings.classList.remove('active');
       };
     }
-    if (!settingsOutsideClickSetup) {
-      settingsOutsideClickSetup = true;
-      document.addEventListener('click', (ev) => {
-        if (!ui.settings) return;
-        if (!ui.settings.classList.contains('active')) return;
-        if (ui.settings.contains(ev.target)) return;
-        if (ui.settingsBtn && ui.settingsBtn.contains(ev.target)) return;
-        ui.settings.classList.remove('active');
-      }, true);
-    }
   }
+
   function createReplayPanel() {
     ui.replayPanel = createEl('div', 'ytm-replay-panel', '', `
       <button class="replay-close-btn">×</button>
