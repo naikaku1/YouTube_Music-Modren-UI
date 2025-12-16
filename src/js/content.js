@@ -525,7 +525,6 @@
       });
     }
 
-    // ★ 戻り値を { ok, ... } にして結果が分かるようにする
     async function syncNow() {
       try {
         const history = await getLocalHistory();
@@ -1412,11 +1411,11 @@
           transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
           filter: blur(0.8px); transform: scale(0.96);
           text-align: center !important; width: 100%;
-          cursor: pointer !important; /* クリックできる感出す */
+          cursor: pointer !important; 
           letter-spacing: -0.01em;
         }
         .lyric-line:hover {
-          color: rgba(255, 255, 255, 0.8) !important; /* ホバーで少し明るく */
+          color: rgba(255, 255, 255, 0.8) !important; 
         }
         .lyric-line.active {
           color: #ffffff !important; filter: blur(0) !important;
@@ -1424,6 +1423,25 @@
           text-shadow: 0 0 40px rgba(255, 255, 255, 0.5) !important;
           opacity: 1 !important;
         }
+        
+        /* ★修正：一文字追跡用のスタイルを強化★ */
+        .lyric-line.active .lyric-char {
+            display: inline-block;
+            transition: opacity 0.1s linear, transform 0.1s linear, text-shadow 0.1s linear;
+        }
+        /* まだ歌われていない文字は薄く */
+        .lyric-line.active .lyric-char.char-pending {
+            opacity: 0.35 !important;
+            text-shadow: none !important;
+        }
+        /* 今歌われている文字は白く光らせる */
+        .lyric-line.active .lyric-char.char-active {
+            opacity: 1 !important;
+            color: #ffffff !important;
+            transform: translateY(-2px);
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.9) !important;
+        }
+
         .lyric-translation { font-size: 0.65em; opacity: 0.7; font-weight: 600; margin-top: 6px; display: block; }
         #pip-lyrics-container::-webkit-scrollbar { display: none; }
         #pip-lyrics-container { -ms-overflow-style: none; scrollbar-width: none; }
@@ -1524,26 +1542,20 @@
       this.pipLyricsContainer.innerHTML = ui.lyrics.innerHTML;
       container.appendChild(this.pipLyricsContainer);
 
-      // ★★★ 追加ポイント: PiP内での歌詞クリック検知 ★★★
       this.pipLyricsContainer.addEventListener('click', (e) => {
-        // クリックされた要素の親をたどって、歌詞行(.lyric-line)を探す
         const target = e.target.closest('.lyric-line');
         if (!target) return;
-
-        // 埋め込まれた時間を取得
         const timeStr = target.dataset.startTime;
         if (timeStr) {
             const time = parseFloat(timeStr);
             if (!isNaN(time)) {
-                // 本体のプレイヤーを操作
                 const v = document.querySelector('video');
                 if (v) {
-                    v.currentTime = time + timeOffset; // ズレ補正も考慮してジャンプ
+                    v.currentTime = time + timeOffset;
                 }
             }
         }
       });
-      // ★★★★★★★★★★★★★★★★★★★★★★★★★
 
       const controls = document.createElement('div');
       controls.id = 'pip-controls';
@@ -1627,8 +1639,7 @@
         wrap.innerHTML = targetIcon;
       }
     }
-  };  
-          // ===================== DeepL / LRC / 翻訳関連 =====================
+  };          // ===================== DeepL / LRC / 翻訳関連 =====================
 
   const resolveDeepLTargetLang = (lang) => {
     switch ((lang || '').toLowerCase()) {
@@ -2736,7 +2747,7 @@
     const lyricsBtnConfig = { txt: 'Lyrics', cls: 'lyrics-btn', click: () => { } };
     const shareBtnConfig = { txt: 'Share', cls: 'share-btn', click: onShareButtonClick };
     
-    // ★追加: PiPボタン
+    //  PiPボタン
     const pipBtnConfig = {
       txt: 'PIP', 
       cls: 'icon-btn',
@@ -3407,7 +3418,7 @@
       } else {
           isFirstSongDetected = false;
       }
-      // ★★★★★★★★★★★★★★★★★★★
+
 
       currentKey = key;
       lyricsData = [];
@@ -3458,7 +3469,42 @@
   loadRemoteTextsFromGithub();
 
   console.log('YTM Immersion loaded.');
-  setInterval(tick, 1000);
+
+
+  const setupObserver = () => {
+ 
+    const targetNode = document.querySelector('ytmusic-player-bar');
+
+ 
+    if (!targetNode) {
+      setTimeout(setupObserver, 500);
+      return;
+    }
+
+
+    const observer = new MutationObserver(() => {
+
+      tick();
+    });
+
+  
+    observer.observe(targetNode, {
+      attributes: true,     
+      childList: true,        
+      subtree: true,          
+      characterData: true    
+    });
+
+    console.log('YTM Immersion: Zero-delay observer started.');
+
+    tick();
+  };
+
+
+  setupObserver();
+
+
+
   startLyricRafLoop();
   hoverTimeInfoSetup();
 })();
