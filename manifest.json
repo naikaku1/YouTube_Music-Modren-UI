@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YTM-Immersion",
-  "version": "0.9.3-001",
+  "version": "0.9.3",
   "description": "YouTube Musicをもっと美しく",
   "permissions": [
     "storage",
@@ -12,8 +12,8 @@
     "https://lrclib.net/*",
     "https://lrchub.coreone.work/*",
     "http://lrchub.coreone.work/*",
-    "http://immersionproject.coreone.work/*",
     "https://immersionproject.coreone.work/*",
+    "http://immersionproject.coreone.work/*",
     "https://api-free.deepl.com/*",
     "https://api.deepl.com/*"
   ],
