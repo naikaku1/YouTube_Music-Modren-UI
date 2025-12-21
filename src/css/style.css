@@ -1214,8 +1214,12 @@ body.ytm-custom-layout ytmusic-player-bar .middle-controls tp-yt-paper-slider#pr
   transform: none !important;
   height: 32px !important;
   padding: 0 !important;
-
   overflow: visible !important;
+
+  /* プログレスバーを角丸の内側に収める */
+  width: auto !important;
+  left: 7px !important;
+  right: 42px !important;
 }
 
 body.ytm-custom-layout ytmusic-player-bar tp-yt-paper-slider#progress-bar [role="slider"] {
