@@ -51,6 +51,7 @@
       // 表示状態を管理
       let isHovering = false;      // カーソルがバー上にある
       let positionChanged = false; // 位置を変更した（ドラッグした）
+      let isDragging = false;      // ドラッグ中かどうか
 
       // ホバー検出
       progressBar.addEventListener('mouseenter', () => {
@@ -64,6 +65,12 @@
       // ドラッグ（位置変更）検出
       progressBar.addEventListener('mousedown', () => {
         positionChanged = true;
+        isDragging = true;
+      });
+
+      // マウスアップでドラッグ終了
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
       });
 
       // バー以外をクリックしたら非表示（キャプチャフェーズで確実にキャッチ）
@@ -113,6 +120,15 @@
         customHandle.style.opacity = '1';
         customHandle.style.left = handleX + 'px';
         customHandle.style.top = handleY + 'px';
+
+        // ドラッグ中は大きく、そうでなければ通常サイズ
+        if (isDragging) {
+          customHandle.style.width = '16px';
+          customHandle.style.height = '16px';
+        } else {
+          customHandle.style.width = '12px';
+          customHandle.style.height = '12px';
+        }
 
         requestAnimationFrame(updateHandlePosition);
       };

@@ -780,13 +780,18 @@ body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls {
 
 body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls #my-mode-toggle {
   order: 99 !important;
-  margin-right: 10px !important;
+  margin-left: 16px !important;
+  margin-right: 16px !important;
 }
 
 body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls .expand-btn,
-body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls tp-yt-paper-icon-button.expand-btn,
-body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls .toggle-player-page-button {
+body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls tp-yt-paper-icon-button.expand-btn {
   order: 100 !important;
+}
+
+/* 非Immersionモード時にモバイル用のボタンを非表示 */
+body:not(.ytm-custom-layout) ytmusic-player-bar #right-controls-mweb {
+  display: none !important;
 }
 
 
