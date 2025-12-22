@@ -222,80 +222,174 @@ body.ytm-custom-layout ytmusic-search-box {
 }
 
 
+/* =========================================
+   新しい設定パネルのデザイン (ここから貼り付け)
+   ========================================= */
+
+/* パネル本体 */
 #ytm-settings-panel {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
-  width: 360px;
-  padding: 25px;
-  background: rgba(30, 30, 30, 0.95);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  z-index: 99999;
+  transform: translate(-50%, -50%) scale(0.95);
+  width: 480px;
+  max-height: 85vh;
   display: none;
   flex-direction: column;
-  gap: 15px;
+  background: rgba(30, 30, 35, 0.85);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   color: #fff;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  z-index: 99999;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #ytm-settings-panel.active {
   display: flex;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 
-#ytm-settings-panel h3 {
-  margin: 0 0 5px 0;
+/* ヘッダー */
+.settings-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.settings-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* 閉じるボタン */
+#ytm-settings-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.8);
   font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 
-#ytm-settings-panel input[type="password"] {
+#ytm-settings-close-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* スクロールエリア */
+.settings-scroll-area {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* 設定セクション */
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+  padding-left: 4px;
+  text-transform: uppercase;
+}
+
+/* カード型デザイン */
+.settings-group-card {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.setting-row {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  min-height: 44px;
+}
+
+.setting-row:last-child {
+  border-bottom: none;
+}
+
+/* 入力欄 */
+.setting-input-text {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  width: 100%;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+/* ボタン */
+.settings-action-btn {
   width: 100%;
   padding: 10px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border-radius: 6px;
-  box-sizing: border-box;
-}
-
-#ytm-settings-panel input[type="number"] {
-  width: 20%;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border-radius: 6px;
-  box-sizing: border-box;
-}
-
-#ytm-settings-panel #sync-offset-setting {
-  display: flex;
-  align-items: center;
-  font-size: 14px;
-  justify-content: space-between;
-}
-
-#ytm-settings-panel button {
-  padding: 10px;
-  background: #fff;
+  border-radius: 10px;
   border: none;
-  border-radius: 6px;
-  font-weight: bold;
+  font-weight: 600;
+  font-size: 13px;
   cursor: pointer;
-  color: #000;
+  margin-top: 8px;
+  transition: transform 0.1s;
 }
 
-.toggle-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
+.settings-action-btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: #007AFF;
+  color: #fff;
+}
+
+.btn-danger {
+  background: rgba(255, 59, 48, 0.15);
+  color: #ff453a;
+  border: 1px solid rgba(255, 59, 48, 0.3);
+}
+
+.btn-danger:hover {
+  background: rgba(255, 59, 48, 0.25);
+}
+
+/* トグルスイッチ調整 */
+.toggle-label span {
   font-size: 14px;
+  font-weight: 500;
 }
 
+/* 1. ベースの形 */
 #trans-toggle,
 #shared-trans-toggle,
-#sync-offset-save-toggle {
+#sync-offset-save-toggle,
+#fast-mode-toggle {  /* ←ここに追加 */
   appearance: none;
   width: 40px;
   height: 22px;
@@ -305,15 +399,19 @@ body.ytm-custom-layout ytmusic-search-box {
   transition: 0.3s;
 }
 
+/* 2. ONになったときの色（緑色） */
 #trans-toggle:checked,
 #shared-trans-toggle:checked,
-#sync-offset-save-toggle:checked {
+#sync-offset-save-toggle:checked,
+#fast-mode-toggle:checked {  /* ←ここに追加 */
   background: #34c759;
 }
 
+/* 3. 白い丸ポチ */
 #trans-toggle::after,
 #shared-trans-toggle::after,
-#sync-offset-save-toggle::after {
+#sync-offset-save-toggle::after,
+#fast-mode-toggle::after {  /* ←ここに追加 */
   content: '';
   position: absolute;
   top: 2px;
@@ -325,12 +423,13 @@ body.ytm-custom-layout ytmusic-search-box {
   transition: 0.3s;
 }
 
+/* 4. ONになったときの丸ポチの移動 */
 #trans-toggle:checked::after,
 #shared-trans-toggle:checked::after,
-#sync-offset-save-toggle:checked::after {
+#sync-offset-save-toggle:checked::after,
+#fast-mode-toggle:checked::after {  
   transform: translateX(18px);
 }
-
 
 .ytm-lang-section {
   margin-top: 10px;
@@ -2016,4 +2115,31 @@ body.ytm-custom-layout ytmusic-player-bar tp-yt-paper-slider#progress-bar {
 
 body.ytm-custom-layout ytmusic-player-bar tp-yt-paper-slider#progress-bar [role="slider"] {
   overflow: visible !important;
+}
+
+body.ytm-custom-layout ytmusic-popup-container,
+body.ytm-custom-layout tp-yt-iron-dropdown,
+body.ytm-custom-layout .tp-yt-iron-dropdown,
+body.ytm-custom-layout tp-yt-paper-dialog,
+body.ytm-custom-layout ytmusic-dialog,
+body.ytm-custom-layout ytmusic-add-to-playlist-renderer,
+body.ytm-custom-layout tp-yt-paper-toast {    z-index: 2147483647 !important;
+}
+
+
+body.ytm-custom-layout tp-yt-iron-overlay-backdrop {
+  z-index: 2147483646 !important;
+}
+
+
+body.ytm-custom-layout::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #050505;
+  z-index: 999; 
+  pointer-events: none;
 }
