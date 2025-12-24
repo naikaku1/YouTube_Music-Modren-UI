@@ -888,9 +888,27 @@ body:not(.ytm-custom-layout) ytmusic-player-bar .right-controls tp-yt-paper-icon
   order: 100 !important;
 }
 
-/* 非Immersionモード時にモバイル用のボタンを非表示 */
-body:not(.ytm-custom-layout) ytmusic-player-bar #right-controls-mweb {
-  display: none !important;
+/* モバイル用のボタン：画面幅に応じて表示/非表示 */
+/* 広い画面では非表示（左側コントロールが表示される） */
+/* 注意: #right-controls-mwebはDOM内に2つ存在する（player-bar内とplayer-page内） */
+@media (min-width: 616px) {
+  #right-controls-mweb,
+  ytmusic-player-bar #right-controls-mweb,
+  ytmusic-player-page #right-controls-mweb {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
+/* Immersionモード時、プレイヤーページが閉じているときのみモバイル用ボタンを非表示 */
+/* （IMMERSボタンに重なる再生/次へボタンを消す） */
+@media (max-width: 615px) {
+  /* body.ytm-custom-layoutまたは#my-mode-toggle.activeが存在する場合 */
+  body.ytm-custom-layout ytmusic-app-layout:not([player-page-open]) ytmusic-player-bar #right-controls-mweb,
+  ytmusic-app-layout:not([player-page-open]) ytmusic-player-bar:has(#my-mode-toggle.active) #right-controls-mweb {
+    display: none !important;
+    visibility: hidden !important;
+  }
 }
 
 
